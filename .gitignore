@@ -1,0 +1,58 @@
+# Built binaries and packages
+*.apk
+*.ap_
+*.aab
+*.dex
+*.class
+
+# Build and cache directories
+.gradle/
+.kotlin/
+**/build/
+/build/
+app/build/
+.build-outputs/
+.externalNativeBuild/
+.cxx/
+/captures/
+*.hprof
+
+# Android Studio and IDE configurations
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Environment variables and sensitive secrets (CRITICAL FOR GITHUB)
+.env
+.env.local
+.env.*.local
+local.properties
+secrets.properties
+signing-key.properties
+
+# Android Keystores and Certificates
+*.keystore
+*.jks
+debug.keystore
+debug.keystore.base64
+*.p12
+*.key
+
+# Google Services / Firebase credentials
+# Note: google-services.json contains client keys for your Firebase project.
+# To keep your private Firebase project separate on public GitHub, use google-services.json.example
+# app/google-services.json
+
+# AI Studio platform internal files
+/.aistudio/
+
+# Log files
+*.log
+
