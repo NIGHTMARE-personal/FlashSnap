@@ -51,14 +51,14 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                FlashNotesApp()
+                FlashSnapApp()
             }
         }
     }
 }
 
 @Composable
-fun FlashNotesApp(
+fun FlashSnapApp(
     viewModel: MainViewModel = viewModel()
 ) {
     val currentScreen by viewModel.currentScreen.collectAsState()

@@ -1,164 +1,205 @@
-# FlashNotes 📚⚡
+# FlashSnap
 
-> **Transform handwritten notes and textbook pages into intelligent study flashcards, master topics with Leitner Spaced Repetition, and test yourself under real-world negative-marking exam conditions.**
-
-Built with **Modern Android (Kotlin & Jetpack Compose)**, **Material Design 3**, **Room Database**, **CameraX**, and **Google Gemini AI**.
-
----
-
-## 🌟 Key Features
-
-- 📸 **AI Document Scanner & Handwriting OCR**:
-  - High-resolution camera viewfinder with document framing grid, pinch-to-zoom, torch toggle, and gallery import.
-  - Automatic perspective and contrast enhancement for clean notebook captures.
-  - Gemini AI handwriting recognition that transcribes diagrams, equations, formulas, and cursive notes into organized cards.
-
-- 🗂️ **Leitner 5-Box Spaced Repetition Engine**:
-  - Scientifically proven spaced interval review system (Boxes 1 through 5).
-  - Cards advance upon correct answers and reset upon incorrect answers.
-  - Interactive 5-box visualization shelf with quick filtering and review triggers.
-
-- ⚡ **Smart Exam Cram Blitz Mode**:
-  - Rapid-fire study session focusing on high-difficulty and low-box flashcards before tests and exams.
-
-- 🎯 **Competitive Negative-Marking Exam Engine**:
-  - Real exam simulation: **+15 XP** on first correct attempt, **+5 XP** on subsequent attempts, and **-10 XP** penalty with loss of life on incorrect answers.
-  - 3-lives challenge with real-time score tracking, streak combos, and detailed post-quiz performance analysis.
-
-- 🔔 **Automated Daily Study Reminders**:
-  - Android notification scheduler with customizable study time presets (morning, afternoon, evening, night).
-  - Direct notification actions to launch the day's recommended quiz deck.
-
-- 💎 **Gamified XP & Level Progression**:
-  - Dynamic student ranks, streak multiplier counters, sound effects (shutter, correct chime, wrong buzz), and tactile haptics.
-
-- 💾 **Offline-First Room Persistence**:
-  - Local database stores all decks, flashcards, review histories, captured notebook pages, and user statistics without requiring network access.
-
----
-
-## 🛡️ Security & Privacy Precautions (GitHub-Ready)
-
-This repository is pre-configured with industry-standard safety practices for open-source hosting:
-
-1. **No Hardcoded Secrets**:
-   - API keys and private tokens are loaded securely via the **Secrets Gradle Plugin** and `BuildConfig`.
-   - The `.env` file is included in `.gitignore` and is **never committed** to the repository.
-
-2. **Protected Signing Credentials**:
-   - `debug.keystore`, `debug.keystore.base64`, and all `*.jks` / `*.keystore` files are strictly excluded via `.gitignore`.
-   - Release signing configurations use environment variables (`KEYSTORE_PATH`, `STORE_PASSWORD`, `KEY_PASSWORD`).
-
-3. **Template Configurations Provided**:
-   - `.env.example` provides a clear template for your Gemini API key.
-   - `app/google-services.json.example` provides a sample Firebase schema if you wish to link your own Firebase project.
-
-4. **Build Artifacts Excluded**:
-   - All `build/`, `.gradle/`, `.kotlin/`, APKs, AABs, and IDE local cache files are excluded in `.gitignore`.
-
----
-
-## 🛠️ Tech Stack & Architecture
-
-- **Language**: Kotlin 2.0+
-- **UI Framework**: Jetpack Compose with Material Design 3 (Dynamic Color, Edge-to-Edge)
-- **Architecture**: Clean MVVM (Model - View - ViewModel) with unidirectional data flow (UDF)
-- **Local Persistence**: Android Room Database (SQLite) with KSP compiler
-- **Camera**: AndroidX CameraX (Lifecycle, Camera2, Viewfinder)
-- **Image Loading**: Coil Compose
-- **Concurrency**: Kotlin Coroutines & `StateFlow` / `collectAsStateWithLifecycle`
-- **AI Integration**: Google Gemini AI REST API via OkHttp & Moshi
-
----
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- **Android Studio** Ladybug (2024.2.1) or newer
-- **JDK 17** (configured as Gradle JDK in Android Studio)
-- **Android SDK Platform 34+** (Min SDK: 24, Target SDK: 36)
-- A physical Android device or emulator running Android 7.0 (API 24) or above
-
-### Installation & Setup
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/YOUR_USERNAME/FlashNotes.git
-   cd FlashNotes
-   ```
-
-2. **Configure Environment Variables**:
-   Copy `.env.example` to `.env` in the root directory:
-   ```bash
-   cp .env.example .env
-   ```
-   Open `.env` and add your **Gemini API Key**:
-   ```properties
-   GEMINI_API_KEY=your_actual_gemini_api_key_here
-   ```
-   > 💡 *You can obtain a free Gemini API key from [Google AI Studio](https://aistudio.google.com/app/apikey).*
-
-3. **Optional: Firebase Configuration**:
-   If you wish to enable Firebase services:
-   - Create a project in the [Firebase Console](https://console.firebase.google.com/).
-   - Add an Android app with package name `flashsnap.android`.
-   - Download `google-services.json` and place it in the `app/` directory.
-
-4. **Open in Android Studio**:
-   - Launch Android Studio.
-   - Select **Open** and choose the `FlashNotes` directory.
-   - Wait for Gradle to download dependencies and sync.
-
-5. **Build and Run**:
-   - Select your target device or emulator in the toolbar.
-   - Click **Run** (`Shift + F10`) or execute via command line:
-     ```bash
-     gradle :app:installDebug
-     ```
-
----
-
-## 📁 Project Structure
+<div align="center">
 
 ```
+  ███████╗██╗      █████╗ ███████╗██╗  ██╗███████╗███╗   ██╗ █████╗ ██████╗ 
+  ██╔════╝██║     ██╔══██╗██╔════╝██║  ██║██╔════╝████╗  ██║██╔══██╗██╔══██╗
+  █████╗  ██║     ███████║███████╗███████║███████╗██╔██╗ ██║███████║██████╔╝
+  ██╔══╝  ██║     ██╔══██║╚════██║██╔══██║╚════██║██║╚██╗██║██╔══██║██╔═══╝ 
+  ██║     ███████╗██║  ██║███████║██║  ██║███████║██║ ╚████║██║  ██║██║     
+  ╚═╝     ╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝╚══════╝╚═╝  ╚═══╝╚═╝  ╚═╝╚═╝     
+```
+
+### Sovereign Multimodal Study Engine // Handwriting Vision OCR, Leitner 5-Box SRS, & Negative-Marking Exam Crucible
+
+[![Platform](https://img.shields.io/badge/Platform-Android%207.0%2B%20(API%2024%2B)-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://android.com)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.0%2B-7F52FF?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose%20MD3-4285F4?style=for-the-badge&logo=jetpackcompose&logoColor=white)](https://developer.android.com/jetpack/compose)
+[![Architecture](https://img.shields.io/badge/Architecture-Clean%20MVVM%20%2B%20UDF-000000?style=for-the-badge)](https://developer.android.com/topic/architecture)
+[![License](https://img.shields.io/badge/License-MIT-ddb568?style=for-the-badge)](LICENSE)
+[![Studio](https://img.shields.io/badge/Architect-NIGHTMARE%20PROJECTS-1a1a1a?style=for-the-badge)](https://github.com/NIGHTMARE-personal)
+
+</div>
+
+---
+
+## 1. Operational Overview
+
+**FlashSnap** is an offline-first sovereign study platform engineered to eliminate the cognitive friction between analog handwriting and long-term memory retention. 
+
+Most digital study apps suffer from two fatal failure modes:
+1. **The Ingestion Bottleneck**: Manually typing flashcards on a mobile keyboard takes 10x longer than handwritten notation, leading to study fatigue before revision begins.
+2. **The Passive Recognition Illusion**: Simple swipe-based flashcards reward vague familiarity rather than precise recall, resulting in catastrophic failure under actual exam pressure.
+
+FlashSnap resolves both failure modes mechanically:
+- **Optical Ingestion**: CameraX-driven high-contrast optical capture feeds raw handwritten notebook pages, textbook diagrams, equations, and tables directly into a multimodal neural transcription pipeline, generating structured question-and-answer pairs in seconds.
+- **Negative-Marking Crucible**: Study sessions transition into high-stakes test simulations featuring strict negative marking, finite lives, and streak-multiplier mechanics to build genuine recall under pressure.
+- **Leitner Spaced Repetition**: Memory degradation is systematically counteracted via an algorithmic 5-box shelf running exponential decay scheduling.
+
+---
+
+## 2. Core Subsystems & Technical Architecture
+
+```
+                                  [ PHYSICAL NOTEBOOK ]
+                                            │ (CameraX Sensor Stream)
+                                            ▼
+                           ┌─────────────────────────────────┐
+                           │   Document Ingestion Pipeline   │
+                           │   - Perspective & Contrast Warp │
+                           │   - 1-to-3 Multi-Page Batching  │
+                           └────────────────┬────────────────┘
+                                            │
+                                            ▼
+                           ┌─────────────────────────────────┐
+                           │ Multimodal Neural OCR Service   │
+                           │ - Handwriting & Cursive Parse   │
+                           │ - Formula & Diagram Synthesis   │
+                           └────────────────┬────────────────┘
+                                            │
+                                            ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                               FlashSnap State Machine                                 │
+│                                                                                        │
+│   ┌────────────────────────┐  ┌────────────────────────┐  ┌────────────────────────┐  │
+│   │ Leitner 5-Box SRS Shelf│  │ Negative-Marking Engine│  │  Cram Blitz Engine     │  │
+│   │ - Exponential Intervals│  │ - (+15 / +5 / -10 XP)  │  │ - Low-Box Filtration   │  │
+│   │ - Strict Reset Logic   │  │ - 3-Heart Penalty Mode │  │ - High-Decay Prioritize│  │
+│   └───────────┬────────────┘  └───────────┬────────────┘  └───────────┬────────────┘  │
+│               │                           │                           │               │
+└───────────────┼───────────────────────────┼───────────────────────────┼───────────────┘
+                ▼                           ▼                           ▼
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                        Local Storage & Hardware Interop Layer                         │
+│                                                                                        │
+│   • Room SQLite Database (Decks, Cards, Review Logs, User Profiles)                   │
+│   • Offline Synthesized Audio (Low-latency ToneGenerator & Dynamic Haptics)           │
+│   • Duplex Vector PDF Generator (Printable A4 double-sided physical cards)            │
+│   • Android Notification Scheduler (AlarmManager study cadence triggers)              │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### A. High-Throughput CameraX Ingestion
+- Viewfinder calibrated with document framing guides, pinch-to-zoom hardware telemetry, torch toggling, and multi-page capture buffers.
+- Pre-processing pipeline enhances contrast and isolates line work from paper shadows prior to neural inference.
+- Generates structured schema containing card title, core concepts, step-by-step solutions, and distractors for multiple-choice verification.
+
+### B. Leitner 5-Box Spaced Repetition Machine
+- **Box 1 (Daily)**: Freshly ingested cards and failed recall attempts.
+- **Box 2 (3-Day Interval)**: Intermediate reinforcement.
+- **Box 3 (Weekly)**: Consolidating memory constructs.
+- **Box 4 (Fortnightly)**: Long-term retention stabilization.
+- **Box 5 (Monthly / Mastered)**: Permanent knowledge anchors.
+- Any missed answer immediately drops the target card back to Box 1, preventing false confidence.
+
+### C. Competitive Negative-Marking Exam Engine
+- Modeled after competitive medical and engineering admissions exams (NEET, JEE, SAT):
+  - **First-Pass Correct**: `+15 XP`
+  - **Subsequent Pass Correct**: `+5 XP`
+  - **Incorrect Penalty**: `-10 XP` and loss of 1 Heart (out of 3).
+- Real-time combo multiplier scaling (`1.0x` to `2.5x`) rewards consistent accuracy while punishing reckless guessing.
+
+### D. Offline-First Room Database & Duplex PDF Compiler
+- Zero-cloud dependency for daily review: local Room SQLite database manages all decks, cards, history logs, and profile statistics.
+- **Duplex A4 PDF Export**: Compiles digital decks into printable physical flashcard sheets with archival warm-paper aesthetics (`#F9F6F0`), cutting crop guidelines, and duplex mirror alignment for physical study.
+
+---
+
+## 3. Technology Stack
+
+| Layer | Technologies |
+| :--- | :--- |
+| **Language** | Kotlin 2.0+ |
+| **UI Framework** | Jetpack Compose (Material Design 3, Dynamic Color, Edge-to-Edge) |
+| **Architecture** | Clean Architecture / MVVM with Unidirectional Data Flow (`StateFlow`) |
+| **Persistence** | AndroidX Room (SQLite) with KSP compiler code generation |
+| **Camera & Vision** | AndroidX CameraX (`camera2`, `view`, `lifecycle`) |
+| **Image Loading** | Coil Compose |
+| **Inference API** | Google Gemini Multimodal REST API (via OkHttp3 & Moshi) |
+| **Hardware Cues** | Android `ToneGenerator` (zero-binary audio synthesis) & `Vibrator` haptics |
+| **Document Output**| Android Native `PdfDocument` with A4 coordinate mapping |
+
+---
+
+## 4. Repository Structure
+
+```
+FlashSnap/
 ├── app/
 │   ├── src/
 │   │   ├── main/
 │   │   │   ├── java/com/example/
 │   │   │   │   ├── data/
-│   │   │   │   │   ├── db/          # Room database, DAOs, and entities
-│   │   │   │   │   ├── gemini/      # Gemini AI OCR & card generation service
-│   │   │   │   │   ├── model/       # Data models (Deck, Flashcard, Profile)
-│   │   │   │   │   └── repository/ # Local data repository
+│   │   │   │   │   ├── gemini/          # Multimodal neural OCR & card synthesis
+│   │   │   │   │   ├── model/           # Deck, Flashcard, QuizQuestion data models
+│   │   │   │   │   ├── notification/    # Daily study reminder AlarmManager triggers
+│   │   │   │   │   └── repository/      # Room database & local SharedPreferences repository
 │   │   │   │   ├── ui/
-│   │   │   │   │   ├── screens/     # Compose screens (Camera, Decks, Quiz, Stats, Settings)
-│   │   │   │   │   ├── theme/       # Material 3 Color scheme, Typography, Shapes
-│   │   │   │   │   └── viewmodel/   # FlashNotesViewModel & State holders
-│   │   │   │   ├── util/            # Audio sound effects & notification helpers
-│   │   │   │   └── MainActivity.kt  # Root activity & navigation coordinator
-│   │   │   └── res/                 # Vector drawables, launcher icons, XML resources
-│   │   └── test/                    # Unit and Robolectric JVM test suite
-│   ├── build.gradle.kts             # App-level dependencies & plugins
-│   └── google-services.json.example # Firebase configuration template
-├── gradle/                          # Gradle wrapper and version catalog (libs.versions.toml)
-├── .env.example                     # Environment template for API keys
-├── .gitignore                       # Security & build exclusions
-├── build.gradle.kts                 # Project-level build script
-└── settings.gradle.kts              # Project modules and repositories
+│   │   │   │   │   ├── components/      # Leitner visualizer, cram blitz, exam charts
+│   │   │   │   │   ├── screens/         # Compose viewports (Camera, Decks, Quiz, Profile)
+│   │   │   │   │   ├── theme/           # MD3 Color scheme, Typography, Surface palettes
+│   │   │   │   │   └── viewmodel/       # MainViewModel & StateFlow coordination
+│   │   │   │   ├── util/                # Duplex PDF exporter & synthesized audio feedback
+│   │   │   │   └── MainActivity.kt      # Root activity & navigation coordinator
+│   │   │   └── res/                     # Vector XML resources & launcher icons
+│   │   └── test/                        # JVM unit & Robolectric test suite
+│   ├── build.gradle.kts                 # Application build rules & dependency graph
+│   └── google-services.json.example     # Firebase configuration schema template
+├── gradle/                              # Gradle wrapper & Version Catalog (libs.versions.toml)
+├── .env.example                         # Local development environment template
+├── .gitignore                           # Strict security, keystore, & build exclusions
+├── build.gradle.kts                     # Top-level multiplatform build script
+├── settings.gradle.kts                  # Project declaration & plugin management
+└── LICENSE                              # MIT License (NIGHTMARE PROJECTS)
 ```
 
 ---
 
-## 🔒 Security Checklist for Contributors
+## 5. Security & OPSEC Doctrine
 
-- [x] Never commit `.env` or files containing plain-text keys.
-- [x] Never commit private keystores or signing passwords.
-- [x] Run unit tests before opening a pull request: `gradle :app:testDebugUnitTest`.
-- [x] Verify build compilation: `gradle :app:assembleDebug`.
+- **Zero Hardcoded Secrets**: Loaded at compile time via Gradle Secrets Plugin into `BuildConfig`.
+- **Keystore Isolation**: Debug and release `.keystore` / `*.jks` files are strictly gitignored.
+- **Privacy First**: Optical camera frames are processed directly in-memory and stored only in internal application cache.
 
 ---
 
-## 📄 License
+## 6. Build & Setup Instructions
 
-This project is licensed under the [MIT License](LICENSE) - see the LICENSE file for details.
+### Prerequisites
+- **Android Studio** Ladybug (2024.2.1) or newer
+- **JDK 17** configured as Gradle JDK
+- **Android SDK Platform 34+** (Min SDK: 24, Target SDK: 36)
+- Physical device or emulator running Android 7.0+ (API 24+)
+
+### Local Compilation
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/NIGHTMARE-personal/FlashSnap.git
+   cd FlashSnap
+   ```
+
+2. **Configure Environment**:
+   ```bash
+   cp .env.example .env
+   ```
+   Provide your Gemini API key in `.env`:
+   ```properties
+   GEMINI_API_KEY=your_gemini_api_key_here
+   ```
+
+3. **Compile and Install Debug APK**:
+   ```bash
+   ./gradlew :app:installDebug
+   ```
+
+---
+
+## 7. Engineering Attribution
+
+- **Lead Architect & Maintainer**: **NIGHTMARE**
+- **Engineering Studio**: **NIGHTMARE-PROJECTS**
+- **Repository**: [https://github.com/NIGHTMARE-personal/FlashSnap](https://github.com/NIGHTMARE-personal/FlashSnap)
+
+Licensed under the [MIT License](LICENSE).

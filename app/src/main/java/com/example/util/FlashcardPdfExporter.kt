@@ -22,7 +22,7 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Exports FlashNotes decks into printable, double-sided cuttable flashcard sheets.
+ * Exports FlashSnap decks into printable, double-sided cuttable flashcard sheets.
  * Formatted with archival bistre ink, crop guidelines, and duplex mirror alignment.
  */
 object FlashcardPdfExporter {
@@ -191,9 +191,9 @@ object FlashcardPdfExporter {
         }
 
         // Write to Cache File
-        val exportDir = File(context.cacheDir, "flashnotes_exports").apply { mkdirs() }
+        val exportDir = File(context.cacheDir, "flashsnap_exports").apply { mkdirs() }
         val cleanName = deck.title.replace(Regex("[^a-zA-Z0-9_]"), "_").take(30)
-        val outFile = File(exportDir, "FlashNotes_${cleanName}_Cards.pdf")
+        val outFile = File(exportDir, "FlashSnap_${cleanName}_Cards.pdf")
 
         try {
             FileOutputStream(outFile).use { out ->
@@ -219,8 +219,8 @@ object FlashcardPdfExporter {
             val shareIntent = Intent(Intent.ACTION_SEND).apply {
                 type = "application/pdf"
                 putExtra(Intent.EXTRA_STREAM, uri)
-                putExtra(Intent.EXTRA_SUBJECT, "FlashNotes: $title (Printable Cards)")
-                putExtra(Intent.EXTRA_TEXT, "Here is your printable flashcard sheet for '$title' created with FlashNotes.")
+                putExtra(Intent.EXTRA_SUBJECT, "FlashSnap: $title (Printable Cards)")
+                putExtra(Intent.EXTRA_TEXT, "Here is your printable flashcard sheet for '$title' created with FlashSnap.")
                 addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             }
 
@@ -247,7 +247,7 @@ object FlashcardPdfExporter {
         subPaint: Paint
     ) {
         val dateStr = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault()).format(Date())
-        canvas.drawText("FLASHNOTES • $subject", MARGIN, 22f, headerPaint)
+        canvas.drawText("FLASHSNAP • $subject", MARGIN, 22f, headerPaint)
         canvas.drawText("$title | $side | $dateStr", MARGIN, 34f, subPaint)
         
         val linePaint = Paint().apply {

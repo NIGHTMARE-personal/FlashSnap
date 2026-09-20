@@ -36,7 +36,7 @@ class FlashcardRepository(private val context: Context) {
 
     companion object {
         private const val TAG = "FlashcardRepository"
-        private const val PREFS_NAME = "flashnotes_prefs"
+        private const val PREFS_NAME = "flashsnap_prefs"
         private const val KEY_DECKS = "saved_decks_json"
         private const val KEY_PROFILE = "saved_profile_json"
         private const val KEY_SYNC_ACCOUNT_ID = "sync_account_id"

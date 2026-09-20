@@ -560,7 +560,7 @@ fun EmptyDecksCard(onScanClick: () -> Unit) {
             Spacer(modifier = Modifier.height(6.dp))
 
             Text(
-                text = "Take 1 to 3 photos of your handwritten notebook or textbook pages. FlashNotes will extract the concepts, build 3D flashcards, and create a negative-marking quiz!",
+                text = "Take 1 to 3 photos of your handwritten notebook or textbook pages. FlashSnap will extract the concepts, build 3D flashcards, and create a negative-marking quiz!",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 lineHeight = 20.sp,

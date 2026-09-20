@@ -1,6 +1,0 @@
-{
-  "name": "FlashNotes",
-  "description": "Turn handwritten notes and textbook pages into flashcards, take quizzes with negative marking, and level up your knowledge with an XP game system.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

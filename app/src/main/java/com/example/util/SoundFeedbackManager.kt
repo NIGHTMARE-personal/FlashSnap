@@ -14,7 +14,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
- * Sound and Haptic feedback manager for FlashNotes.
+ * Sound and Haptic feedback manager for FlashSnap.
  * Generates low-latency acoustic cues (shutter click, paper flip, success chime, penalty buzz)
  * and tactile haptics completely offline with zero binary assets.
  */

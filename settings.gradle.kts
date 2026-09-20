@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "FlashNotes"
+rootProject.name = "FlashSnap"
 
 include(":app")
