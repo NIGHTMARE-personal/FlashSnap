@@ -13,6 +13,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -36,10 +37,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -73,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.FlashcardDeck
 import com.example.data.model.QuizQuestion
+import com.example.data.model.UserProfile
 import com.example.data.util.LanguageHelper
 import com.example.ui.components.FloatingXpBadge
 import com.example.ui.components.PulsingStreakFlame
@@ -105,6 +109,8 @@ fun QuizScreen(
     onRecordResult: (isCorrect: Boolean, isFinalAttempt: Boolean) -> Unit = { _, _ -> },
     studyLanguage: String = "EN",
     onToggleLanguage: () -> Unit = {},
+    profile: UserProfile? = null,
+    onRegenerateDynamicQuiz: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (deck == null || deck.quiz.isEmpty()) {
@@ -269,7 +275,7 @@ fun QuizScreen(
                             .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Text(
-                            text = if (netPoints >= 0) "+$netPoints XP" else "$netPoints XP",
+                            text = if (netPoints >= 0) "Net Score: +$netPoints XP" else "Net Score: $netPoints XP",
                             fontWeight = FontWeight.Black,
                             fontSize = 12.sp,
                             color = if (netPoints >= 0) SuccessEmerald else PenaltyRed
@@ -279,6 +285,92 @@ fun QuizScreen(
                     // Pulsing Streak Flame
                     if (currentStreak >= 2) {
                         PulsingStreakFlame(streak = currentStreak)
+                    }
+                }
+
+                // Level Progression Banner integrated with XP
+                profile?.let { p ->
+                    val levelInfo = p.levelInfo
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    val badge = when (levelInfo.level) {
+                                        1 -> "🌱"
+                                        2 -> "📜"
+                                        3 -> "⭐"
+                                        4 -> "🔥"
+                                        5 -> "👑"
+                                        else -> "🏆"
+                                    }
+                                    Text(text = badge, fontSize = 14.sp)
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Level ${levelInfo.level} • ${levelInfo.title}",
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Black,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                                Text(
+                                    text = "${p.xp} / ${levelInfo.maxXp} XP",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            LinearProgressIndicator(
+                                progress = { levelInfo.progress },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(5.dp)
+                                    .clip(RoundedCornerShape(3.dp)),
+                                color = MaterialTheme.colorScheme.primary,
+                                trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                            )
+                        }
+                    }
+                }
+
+                // Scoring Rules & Dynamic Quiz generator indicator
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (studyLanguage == "HI") "नियम: सही उत्तर +15 XP • गलत उत्तर -10 XP" else "Scoring: +15 XP Correct • -10 XP Penalty",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 11.sp
+                    )
+                    if (onRegenerateDynamicQuiz != null) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                            modifier = Modifier.clickable { onRegenerateDynamicQuiz() }
+                        ) {
+                            Text(
+                                text = "⚡ Regenerate from Cards",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                fontSize = 10.sp
+                            )
+                        }
                     }
                 }
 
@@ -761,7 +853,7 @@ private fun DuolingoActionSheet(
                         Spacer(modifier = Modifier.width(10.dp))
                         Column {
                             Text(
-                                text = if (studyLanguage == "HI") "सारे प्रयास समाप्त! (प्रयास 3 / 3)" else "Out of attempts! (Attempt 3 of 3)",
+                                text = if (studyLanguage == "HI") "प्रयास समाप्त! -${currentQuestion.penaltyXp} XP ऋणात्मक अंक" else "Out of attempts! -${currentQuestion.penaltyXp} XP Penalty",
                                 fontWeight = FontWeight.Black,
                                 color = PenaltyRed,
                                 fontSize = 15.sp

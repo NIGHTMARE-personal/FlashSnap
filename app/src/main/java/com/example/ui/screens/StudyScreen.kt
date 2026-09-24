@@ -16,6 +16,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -43,6 +45,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.FormatListBulleted
@@ -51,6 +54,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Style
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -61,6 +65,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -101,9 +107,9 @@ import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
 enum class StudyMode {
+    ALL_CARDS_LIST,
     CARD_FLIP,
-    QUESTIONS_TO_SOLVE,
-    ALL_CARDS_LIST
+    QUESTIONS_TO_SOLVE
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -120,10 +126,11 @@ fun StudyScreen(
     onBack: () -> Unit,
     studyLanguage: String = "EN",
     onToggleLanguage: () -> Unit = {},
-    initialMode: StudyMode = StudyMode.CARD_FLIP,
+    initialMode: StudyMode = StudyMode.ALL_CARDS_LIST,
     onProblemSolved: (problemId: String, isSolved: Boolean) -> Unit = { _, _ -> },
     onProblemDraftChange: (problemId: String, draft: String) -> Unit = { _, _ -> },
     onGenerateMoreProblems: () -> Unit = {},
+    onMarkCardMastery: ((cardId: String, isMastered: Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     if (deck == null || deck.cards.isEmpty()) {
@@ -329,11 +336,30 @@ fun StudyScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = studyMode == StudyMode.ALL_CARDS_LIST,
+                    onClick = { studyMode = StudyMode.ALL_CARDS_LIST },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Default.FormatListBulleted,
+                            contentDescription = null,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    },
+                    label = { Text("All Flashcards ($totalCards)", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.height(30.dp),
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                )
+
                 FilterChip(
                     selected = studyMode == StudyMode.CARD_FLIP,
                     onClick = { studyMode = StudyMode.CARD_FLIP },
@@ -369,24 +395,6 @@ fun StudyScreen(
                         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 )
-
-                FilterChip(
-                    selected = studyMode == StudyMode.ALL_CARDS_LIST,
-                    onClick = { studyMode = StudyMode.ALL_CARDS_LIST },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Default.FormatListBulleted,
-                            contentDescription = null,
-                            modifier = Modifier.size(14.dp)
-                        )
-                    },
-                    label = { Text("All Cards ($totalCards)", fontSize = 11.sp) },
-                    modifier = Modifier.height(30.dp),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                    )
-                )
             }
 
             // Quick gesture guidance pill
@@ -413,7 +421,7 @@ fun StudyScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.Center,
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 // Header indicator
@@ -480,7 +488,7 @@ fun StudyScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
+                        .heightIn(min = 260.dp, max = 360.dp)
                         .offset { IntOffset(dragOffsetX.value.roundToInt(), 0) }
                         .graphicsLayer {
                             rotationZ = dragRotation
@@ -774,17 +782,186 @@ fun StudyScreen(
                 )
             }
             StudyMode.ALL_CARDS_LIST -> {
-                // ALL CARDS ORGANIZED LIST VIEW
+                // ALL CARDS SCROLLABLE LIST VIEW WITH FIXED MAX HEIGHT CONTAINERS
+                var searchQuery by remember { mutableStateOf("") }
+                val filteredCards = remember(deck.cards, searchQuery) {
+                    if (searchQuery.isBlank()) deck.cards
+                    else deck.cards.filter { card ->
+                        card.front.contains(searchQuery, ignoreCase = true) ||
+                        card.back.contains(searchQuery, ignoreCase = true) ||
+                        card.tag.contains(searchQuery, ignoreCase = true) ||
+                        card.keyTerm.contains(searchQuery, ignoreCase = true)
+                    }
+                }
+
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 80.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .testTag("study_all_cards_lazy_column"),
+                    contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
-                    itemsIndexed(deck.cards, key = { _, card -> card.id }) { index, card ->
-                        CleanCardListItem(
+                    // Deck Overview & Hero Stats Banner
+                    item {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                            ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = deck.title,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            fontWeight = FontWeight.Black,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = "${deck.subject} • ${deck.cards.size} Flashcards",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+
+                                    if (deck.quiz.isNotEmpty()) {
+                                        Surface(
+                                            shape = RoundedCornerShape(10.dp),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(10.dp))
+                                                .clickable { onStartQuiz() }
+                                                .testTag("start_quiz_hero_btn")
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.PlayArrow,
+                                                    contentDescription = null,
+                                                    tint = MaterialTheme.colorScheme.onPrimary,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "Take Quiz (+15 XP)",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onPrimary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Mastery progress bar
+                                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "Mastery Progress",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = "$masteredCount / $totalCards cards (${if (totalCards > 0) ((masteredCount.toFloat() / totalCards) * 100).toInt() else 0}%)",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = SuccessSage
+                                        )
+                                    }
+                                    LinearProgressIndicator(
+                                        progress = { if (totalCards > 0) (masteredCount.toFloat() / totalCards).coerceIn(0f, 1f) else 0f },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(6.dp)
+                                            .clip(RoundedCornerShape(3.dp)),
+                                        color = SuccessSage,
+                                        trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                    )
+                                }
+
+                                // In-deck Search Bar
+                                OutlinedTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(48.dp)
+                                        .testTag("in_deck_search_input"),
+                                    placeholder = { Text("Search cards in ${deck.title}...", fontSize = 12.sp) },
+                                    leadingIcon = {
+                                        Icon(Icons.Filled.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    },
+                                    trailingIcon = {
+                                        if (searchQuery.isNotEmpty()) {
+                                            IconButton(onClick = { searchQuery = "" }, modifier = Modifier.size(24.dp)) {
+                                                Icon(Icons.Filled.Clear, contentDescription = "Clear search", modifier = Modifier.size(16.dp))
+                                            }
+                                        }
+                                    },
+                                    shape = RoundedCornerShape(12.dp),
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                                        focusedContainerColor = MaterialTheme.colorScheme.surface,
+                                        unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                                        focusedBorderColor = MaterialTheme.colorScheme.primary
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    // Section Heading
+                    item {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "FLASHCARDS (${filteredCards.size})",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                letterSpacing = 0.8.sp
+                            )
+                            Text(
+                                text = "Tap card to flip • Bounded height",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    // Flashcard Items with fixed maximum height containers
+                    itemsIndexed(filteredCards, key = { _, card -> card.id }) { index, card ->
+                        ScrollableFlashcardItem(
                             index = index + 1,
                             card = card,
-                            studyLanguage = studyLanguage
+                            studyLanguage = studyLanguage,
+                            onToggleMastery = { isMastered ->
+                                SoundFeedbackManager.getInstance(context).playCorrectSound()
+                                onMarkCardMastery?.invoke(card.id, isMastered)
+                                    ?: onMarkMastery(isMastered)
+                            }
                         )
                     }
                 }
@@ -1003,54 +1180,61 @@ private fun CleanFlashcardFront(
             }
 
             // Question / Concept Prompt
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(vertical = 12.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(vertical = 4.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = frontText,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    lineHeight = 26.sp
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = frontText,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        lineHeight = 26.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-                // Secondary English reference subtitle when in Hindi mode
-                if (studyLanguage == "HI" && card.front.isNotBlank() && card.front != frontText) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ) {
-                        Text(
-                            text = "EN: ${card.front}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                        )
+                    // Secondary English reference subtitle when in Hindi mode
+                    if (studyLanguage == "HI" && card.front.isNotBlank() && card.front != frontText) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Text(
+                                text = "EN: ${card.front}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
                     }
-                }
 
-                if (keyTermText.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Text(
-                            text = if (studyLanguage == "HI") "प्रमुख शब्द: $keyTermText" else "Key Term: $keyTermText",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-                        )
+                    if (keyTermText.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Text(
+                                text = if (studyLanguage == "HI") "प्रमुख शब्द: $keyTermText" else "Key Term: $keyTermText",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -1140,38 +1324,45 @@ private fun CleanFlashcardBack(
             }
 
             // Answer Content
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
-                    .verticalScroll(rememberScrollState())
-                    .padding(vertical = 12.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(vertical = 4.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = backText,
-                    style = MaterialTheme.typography.bodyMedium,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    lineHeight = 23.sp
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = backText,
+                        style = MaterialTheme.typography.bodyLarge,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        lineHeight = 24.sp,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-                // Secondary English text when in Hindi mode
-                if (studyLanguage == "HI" && card.back.isNotBlank() && card.back != backText) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                    ) {
-                        Text(
-                            text = "EN: ${card.back}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                            lineHeight = 18.sp
-                        )
+                    // Secondary English text when in Hindi mode
+                    if (studyLanguage == "HI" && card.back.isNotBlank() && card.back != backText) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        ) {
+                            Text(
+                                text = "EN: ${card.back}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                                lineHeight = 18.sp
+                            )
+                        }
                     }
                 }
             }
@@ -1203,99 +1394,354 @@ private fun CleanFlashcardBack(
     }
 }
 
+/**
+ * Scrollable Flashcard Item with a fixed maximum height container.
+ * Ensures cards never overflow the screen, never leave large empty spaces, never overlap, and never warp.
+ */
 @Composable
-private fun CleanCardListItem(
+fun ScrollableFlashcardItem(
     index: Int,
     card: Flashcard,
-    studyLanguage: String = "EN"
+    studyLanguage: String = "EN",
+    deckTitle: String? = null,
+    onToggleMastery: (Boolean) -> Unit = {},
+    onClickStudy: (() -> Unit)? = null,
+    modifier: Modifier = Modifier
 ) {
+    var isFlipped by remember { mutableStateOf(false) }
+    val rotation by animateFloatAsState(
+        targetValue = if (isFlipped) 180f else 0f,
+        animationSpec = tween(durationMillis = 340, easing = FastOutSlowInEasing),
+        label = "item_flip_3d"
+    )
+    val density = LocalDensity.current.density
     val frontText = LanguageHelper.getFront(card, studyLanguage)
     val backText = LanguageHelper.getBack(card, studyLanguage)
 
+    // Card Container with strict bounded height: min = 190.dp, max = 290.dp
     Card(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
+            .heightIn(min = 190.dp, max = 290.dp)
+            .graphicsLayer {
+                rotationY = rotation
+                cameraDistance = 14f * density
+            }
             .border(
-                1.dp,
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
-                RoundedCornerShape(14.dp)
-            ),
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                width = 1.dp,
+                color = if (card.isMastered) SuccessSage.copy(alpha = 0.6f)
+                else MaterialTheme.colorScheme.outline.copy(alpha = 0.28f),
+                shape = RoundedCornerShape(16.dp)
+            )
+            .clickable { isFlipped = !isFlipped }
+            .testTag("flashcard_item_${card.id}"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isFlipped) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+            else MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+        if (rotation <= 90f) {
+            // FRONT: Question Side
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
+                // Top Meta Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "#$index",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                            )
+                        }
+
+                        if (!deckTitle.isNullOrBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    text = deckTitle,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        } else if (card.tag.isNotBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Text(
+                                    text = card.tag,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        // Leitner Spaced Repetition box pill
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        ) {
+                            Text(
+                                text = "Box ${card.leitnerBox}",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    // Interactive Mastered Toggle Pill
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (card.isMastered) SuccessSage.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(
+                            1.dp,
+                            if (card.isMastered) SuccessSage.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                        ),
                         modifier = Modifier
-                            .size(22.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primaryContainer),
-                        contentAlignment = Alignment.Center
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onToggleMastery(!card.isMastered) }
+                            .testTag("toggle_mastery_card_${card.id}")
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (card.isMastered) Icons.Filled.Check else Icons.Filled.School,
+                                contentDescription = null,
+                                tint = if (card.isMastered) SuccessSage else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (card.isMastered) "Mastered" else "Mark Done",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (card.isMastered) SuccessSage else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                // Middle Question Text: Scrollable inside the bounded card so it never clips or warps
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = "$index",
-                            fontSize = 10.sp,
+                            text = frontText,
+                            style = MaterialTheme.typography.bodyLarge,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 22.sp
                         )
                     }
-                    Spacer(modifier = Modifier.width(8.dp))
+                }
+
+                // Bottom Flip Hint Strip
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Flip,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (studyLanguage == "HI") "उत्तर देखने के लिए टैप करें" else "Tap to flip & view answer",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     Text(
-                        text = if (studyLanguage == "HI") "अवधारणा $index" else card.tag.ifBlank { "Concept" },
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = "FRONT",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.outline
                     )
                 }
+            }
+        } else {
+            // BACK: Answer Side (Compensate for 180° rotation so text isn't mirrored)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { rotationY = 180f }
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Top Meta Row
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = SuccessSage.copy(alpha = 0.2f)
+                        ) {
+                            Text(
+                                text = "✓ ANSWER #$index",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = SuccessSage,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                            )
+                        }
 
-                if (card.isMastered) {
+                        if (card.keyTerm.isNotBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(6.dp),
+                                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            ) {
+                                Text(
+                                    text = card.keyTerm,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Interactive Mastered Toggle Pill
                     Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.tertiaryContainer
+                        shape = RoundedCornerShape(8.dp),
+                        color = if (card.isMastered) SuccessSage.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(
+                            1.dp,
+                            if (card.isMastered) SuccessSage.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                        ),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onToggleMastery(!card.isMastered) }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Check,
+                                contentDescription = null,
+                                tint = if (card.isMastered) SuccessSage else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = if (card.isMastered) "Mastered" else "Mark Done",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (card.isMastered) SuccessSage else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+
+                // Middle Answer Text: Scrollable inside the bounded card so it never clips or warps
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.Center
                     ) {
                         Text(
-                            text = if (studyLanguage == "HI") "कंठस्थ ✓" else "Mastered",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = SuccessSage,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            text = backText,
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            lineHeight = 21.sp
                         )
                     }
                 }
-            }
 
-            // Question
-            Text(
-                text = frontText,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-
-            // Answer
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text(
-                    text = backText,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(8.dp),
-                    lineHeight = 18.sp
-                )
+                // Bottom Flip Hint Strip
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(SuccessSage.copy(alpha = 0.12f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Replay,
+                            contentDescription = null,
+                            tint = SuccessSage,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (studyLanguage == "HI") "प्रश्न पर वापस जाने के लिए टैप करें" else "Tap to flip back to question",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = SuccessSage
+                        )
+                    }
+                    Text(
+                        text = "BACK",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Black,
+                        color = SuccessSage
+                    )
+                }
             }
         }
     }

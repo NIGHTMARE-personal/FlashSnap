@@ -306,6 +306,20 @@ fun WeeklyStudyProgressChart(
             // STANDARD COMPOSE CANVAS STUDY PROGRESS CHART
             // ══════════════════════════════════════════════════════════════
             val density = LocalDensity.current
+            val yAxisPaint = remember {
+                android.graphics.Paint().apply {
+                    color = android.graphics.Color.GRAY
+                    textAlign = android.graphics.Paint.Align.RIGHT
+                    isAntiAlias = true
+                }
+            }
+            val xAxisPaint = remember {
+                android.graphics.Paint().apply {
+                    textAlign = android.graphics.Paint.Align.CENTER
+                    isAntiAlias = true
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -339,6 +353,7 @@ fun WeeklyStudyProgressChart(
                     // 1. Horizontal Reference Grid Lines (0%, 50%, 100%)
                     val gridSteps = 3
                     val dashPathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                    yAxisPaint.textSize = 10.sp.toPx()
 
                     for (step in 0..gridSteps) {
                         val fraction = step.toFloat() / gridSteps.toFloat()
@@ -354,20 +369,12 @@ fun WeeklyStudyProgressChart(
 
                         // Y-Axis label (XP level)
                         val xpValueAtLine = (maxVal * fraction).toInt()
-                        drawContext.canvas.nativeCanvas.apply {
-                            val paint = android.graphics.Paint().apply {
-                                color = android.graphics.Color.GRAY
-                                textSize = 10.sp.toPx()
-                                textAlign = android.graphics.Paint.Align.RIGHT
-                                isAntiAlias = true
-                            }
-                            drawText(
-                                "${xpValueAtLine}",
-                                leftPadding - 6.dp.toPx(),
-                                y + 4.dp.toPx(),
-                                paint
-                            )
-                        }
+                        drawContext.canvas.nativeCanvas.drawText(
+                            "$xpValueAtLine",
+                            leftPadding - 6.dp.toPx(),
+                            y + 4.dp.toPx(),
+                            yAxisPaint
+                        )
                     }
 
                     // 2. Compute Point Coordinates
@@ -493,27 +500,22 @@ fun WeeklyStudyProgressChart(
 
                         // 4. X-Axis Day Labels below the chart
                         val dayText = weeklyData[i].dayLabel
-                        drawContext.canvas.nativeCanvas.apply {
-                            val paint = android.graphics.Paint().apply {
-                                color = if (isToday) {
-                                    android.graphics.Color.parseColor("#388E3C") // Emerald Green
-                                } else if (isSelected) {
-                                    android.graphics.Color.DKGRAY
-                                } else {
-                                    android.graphics.Color.GRAY
-                                }
-                                textSize = if (isSelected || isToday) 11.sp.toPx() else 10.sp.toPx()
-                                textAlign = android.graphics.Paint.Align.CENTER
-                                isFakeBoldText = isSelected || isToday
-                                isAntiAlias = true
-                            }
-                            drawText(
-                                dayText,
-                                pt.x,
-                                topPadding + chartHeight + 18.dp.toPx(),
-                                paint
-                            )
+                        xAxisPaint.color = if (isToday) {
+                            android.graphics.Color.parseColor("#388E3C") // Emerald Green
+                        } else if (isSelected) {
+                            android.graphics.Color.DKGRAY
+                        } else {
+                            android.graphics.Color.GRAY
                         }
+                        xAxisPaint.textSize = if (isSelected || isToday) 11.sp.toPx() else 10.sp.toPx()
+                        xAxisPaint.isFakeBoldText = isSelected || isToday
+
+                        drawContext.canvas.nativeCanvas.drawText(
+                            dayText,
+                            pt.x,
+                            topPadding + chartHeight + 18.dp.toPx(),
+                            xAxisPaint
+                        )
                     }
                 }
             }

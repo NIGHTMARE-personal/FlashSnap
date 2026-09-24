@@ -209,7 +209,10 @@ fun FlashSnapApp(
                                 onSolveProblems = { deckId -> viewModel.navigateTo(Screen.Study(deckId = deckId, initialMode = "SOLVE")) },
                                 onStartQuiz = { deckId -> viewModel.navigateTo(Screen.Quiz(deckId)) },
                                 onDeleteDeck = { deckId -> viewModel.deleteDeck(deckId) },
-                                onGoToCamera = { viewModel.navigateTo(Screen.Camera) }
+                                onGoToCamera = { viewModel.navigateTo(Screen.Camera) },
+                                onMarkCardMastery = { deckId, cardId, isMastered ->
+                                    viewModel.markSpecificCardMastery(deckId, cardId, isMastered)
+                                }
                             )
                         }
                     }
@@ -305,6 +308,9 @@ fun FlashSnapApp(
                             onNext = { viewModel.nextCard() },
                             onPrevious = { viewModel.previousCard() },
                             onMarkMastery = { isMastered -> viewModel.markCardMastery(isMastered) },
+                            onMarkCardMastery = { cardId, isMastered ->
+                                activeDeck?.let { viewModel.markSpecificCardMastery(it.id, cardId, isMastered) }
+                            },
                             onStartQuiz = {
                                 activeDeck?.let { viewModel.navigateTo(Screen.Quiz(it.id)) }
                             },
@@ -343,7 +349,11 @@ fun FlashSnapApp(
                                     ?: viewModel.navigateTo(Screen.Decks)
                             },
                             studyLanguage = userProfile.studyLanguage,
-                            onToggleLanguage = { viewModel.toggleStudyLanguage() }
+                            onToggleLanguage = { viewModel.toggleStudyLanguage() },
+                            profile = userProfile,
+                            onRegenerateDynamicQuiz = {
+                                activeDeck?.let { viewModel.regenerateQuizFromFlashcards(it.id) }
+                            }
                         )
                     }
 

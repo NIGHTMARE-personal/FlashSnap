@@ -65,6 +65,10 @@ class GeminiFlashcardService {
                 }
                 appendLine()
                 appendLine("Return a single JSON object with EXACTLY the following format, providing BOTH English and Hindi for every card and question:")
+                appendLine("CRITICAL CONTENT & QUALITY RULES:")
+                appendLine("1. NEVER generate meta-questions about page numbers (e.g. NEVER ask 'What is on page 4?', 'What does page 2 discuss?', or 'Summarize page 1').")
+                appendLine("2. Always formulate substantive academic questions that test real concepts, definitions, formulas, reactions, laws, and facts.")
+                appendLine("3. The flashcard front MUST be a clear question or prompt (e.g. 'What is Newton's Second Law?', 'Define photosynthesis', 'State the Pythagorean theorem').")
                 appendLine("""
                 {
                   "title": "Clear concise subject title",
@@ -214,9 +218,15 @@ class GeminiFlashcardService {
             if (flashcardsJson != null) {
                 for (i in 0 until flashcardsJson.length()) {
                     val c = flashcardsJson.getJSONObject(i)
-                    val front = c.optString("front", "Question")
-                    val back = c.optString("back", "Answer")
-                    val keyTerm = c.optString("keyTerm", "")
+                    var front = c.optString("front", "Question").trim()
+                    val back = c.optString("back", "Answer").trim()
+                    var keyTerm = c.optString("keyTerm", "").trim()
+                    if (front.contains(Regex("(?i)page\\s*\\d+")) || front.startsWith("What's in page", ignoreCase = true) || front.startsWith("What is in page", ignoreCase = true)) {
+                        front = if (keyTerm.isNotBlank()) "What is the key principle of $keyTerm?" else "Define the core concept: \"${back.take(45)}\""
+                    }
+                    if (keyTerm.contains(Regex("(?i)page\\s*\\d+"))) {
+                        keyTerm = back.take(30)
+                    }
                     val frontHindi = c.optString("frontHindi", "").ifBlank { com.example.data.util.LanguageHelper.autoTranslateToHindi(front) }
                     val backHindi = c.optString("backHindi", "").ifBlank { com.example.data.util.LanguageHelper.autoTranslateToHindi(back) }
                     val keyTermHindi = c.optString("keyTermHindi", "").ifBlank { com.example.data.util.LanguageHelper.autoTranslateToHindi(keyTerm) }
@@ -240,7 +250,13 @@ class GeminiFlashcardService {
             if (quizJson != null) {
                 for (i in 0 until quizJson.length()) {
                     val q = quizJson.getJSONObject(i)
-                    val question = q.optString("question", "Question")
+                    var question = q.optString("question", "Question").trim()
+                    if (question.contains(Regex("(?i)page\\s*\\d+")) || question.startsWith("What's in page", ignoreCase = true) || question.startsWith("What is in page", ignoreCase = true)) {
+                        question = question.replace(Regex("(?i)page\\s*\\d+[:\\-\\s]*"), "").trim()
+                        if (question.isBlank() || question.length < 5) {
+                            question = "What is the key principle discussed in this topic?"
+                        }
+                    }
                     val questionHindi = q.optString("questionHindi", "").ifBlank { com.example.data.util.LanguageHelper.autoTranslateToHindi(question) }
                     val explanation = q.optString("explanation", "Correct answer verified from notes.")
                     val explanationHindi = q.optString("explanationHindi", "").ifBlank { com.example.data.util.LanguageHelper.autoTranslateToHindi(explanation) }
@@ -642,6 +658,9 @@ class GeminiFlashcardService {
     }
 
     suspend fun extractTextFromBitmap(bitmap: Bitmap): String = withContext(Dispatchers.IO) {
+        // 1. Run real on-device Google ML Kit OCR (instant, offline, works without any API key)
+        val onDeviceText = com.example.util.OfflineOcrProcessor.extractTextFromBitmap(bitmap)
+
         val apiKey = try {
             BuildConfig.GEMINI_API_KEY
         } catch (e: Throwable) {
@@ -691,7 +710,7 @@ class GeminiFlashcardService {
             }
         }
 
-        // Return clear structured text
-        ""
+        // Return real on-device ML Kit OCR text
+        onDeviceText
     }
 }

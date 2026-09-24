@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -12,6 +13,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.ImageProxy
@@ -20,6 +22,7 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -32,6 +35,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -43,6 +47,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -94,7 +99,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -107,9 +115,12 @@ import com.example.data.model.CapturedPage
 import com.example.ui.theme.SuccessSage
 import com.example.util.OfflineOcrProcessor
 import com.example.util.SoundFeedbackManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.InputStream
 import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 
 @Composable
 fun FullScreenCameraScreen(
@@ -145,6 +156,15 @@ fun FullScreenCameraScreen(
     var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
     var imageCaptureRef by remember { mutableStateOf<ImageCapture?>(null) }
     var cameraRef by remember { mutableStateOf<Camera?>(null) }
+    val cameraCaptureExecutor = remember { Executors.newSingleThreadExecutor() }
+
+    // Tap-to-Focus state
+    var focusPoint by remember { mutableStateOf<Offset?>(null) }
+    val focusScaleAnim = remember { Animatable(1.5f) }
+    val focusAlphaAnim = remember { Animatable(0f) }
+
+    // Document Filter Mode (Defaults to high-fidelity HD ORIGINAL so photos are crystal-clear and non-degraded)
+    var selectedFilter by remember { mutableStateOf(OfflineOcrProcessor.DocumentFilter.ORIGINAL) }
 
     // Shutter flash animation
     val flashAlpha = remember { Animatable(0f) }
@@ -162,7 +182,7 @@ fun FullScreenCameraScreen(
         label = "scan_beam_progress"
     )
 
-    // Visual media picker
+    // Visual media picker (preserves original high quality)
     val photoPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri: Uri? ->
@@ -172,7 +192,7 @@ fun FullScreenCameraScreen(
                 val bitmap = BitmapFactory.decodeStream(inputStream)
                 inputStream?.close()
                 if (bitmap != null) {
-                    val finalBitmap = if (edgeOcrActive) OfflineOcrProcessor.preprocessDocumentBitmap(bitmap) else bitmap
+                    val finalBitmap = OfflineOcrProcessor.applyDocumentFilter(bitmap, selectedFilter)
                     onPageCaptured(finalBitmap)
                 }
             } catch (e: Exception) {
@@ -187,6 +207,14 @@ fun FullScreenCameraScreen(
         }
     }
 
+    fun fallbackToPreviewBitmap() {
+        val previewBitmap = previewViewRef?.bitmap
+        if (previewBitmap != null) {
+            val finalBitmap = OfflineOcrProcessor.applyDocumentFilter(previewBitmap, selectedFilter)
+            scope.launch(Dispatchers.Main) { onPageCaptured(finalBitmap) }
+        }
+    }
+
     fun triggerShutter() {
         SoundFeedbackManager.getInstance(context).playShutterSound()
         scope.launch {
@@ -195,39 +223,49 @@ fun FullScreenCameraScreen(
             flashAlpha.animateTo(0f, animationSpec = tween(150))
         }
 
-        // Try getting bitmap from previewView first (instant & reliable across emulators)
-        val previewBitmap = previewViewRef?.bitmap
-        if (previewBitmap != null) {
-            val finalBitmap = if (edgeOcrActive) OfflineOcrProcessor.preprocessDocumentBitmap(previewBitmap) else previewBitmap
-            onPageCaptured(finalBitmap)
-        } else {
-            // Fallback to ImageCapture
-            val imageCapture = imageCaptureRef
-            if (imageCapture != null) {
-                val executor = Executors.newSingleThreadExecutor()
-                imageCapture.takePicture(
-                    executor,
-                    object : ImageCapture.OnImageCapturedCallback() {
-                        override fun onCaptureSuccess(image: ImageProxy) {
+        // Primary: Full Hardware Sensor ImageCapture (12MP/48MP native quality)
+        val imageCapture = imageCaptureRef
+        if (imageCapture != null) {
+            imageCapture.takePicture(
+                cameraCaptureExecutor,
+                object : ImageCapture.OnImageCapturedCallback() {
+                    override fun onCaptureSuccess(image: ImageProxy) {
+                        try {
+                            val rotation = image.imageInfo.rotationDegrees
                             val buffer = image.planes[0].buffer
                             val bytes = ByteArray(buffer.remaining())
                             buffer.get(bytes)
-                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            val rawBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
                             image.close()
-                            if (bitmap != null) {
-                                val finalBitmap = if (edgeOcrActive) OfflineOcrProcessor.preprocessDocumentBitmap(bitmap) else bitmap
-                                scope.launch { onPageCaptured(finalBitmap) }
-                            }
-                        }
 
-                    override fun onError(exception: ImageCaptureException) {
-                            Log.e("FullScreenCamera", "ImageCapture failed", exception)
+                            if (rawBitmap != null) {
+                                val orientedBitmap = if (rotation != 0) {
+                                    val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
+                                    Bitmap.createBitmap(rawBitmap, 0, 0, rawBitmap.width, rawBitmap.height, matrix, true)
+                                } else {
+                                    rawBitmap
+                                }
+                                val finalBitmap = OfflineOcrProcessor.applyDocumentFilter(orientedBitmap, selectedFilter)
+                                scope.launch(Dispatchers.Main) {
+                                    onPageCaptured(finalBitmap)
+                                }
+                            } else {
+                                fallbackToPreviewBitmap()
+                            }
+                        } catch (e: Exception) {
+                            Log.e("FullScreenCamera", "Error processing captured sensor photo", e)
+                            fallbackToPreviewBitmap()
                         }
                     }
-                )
-            } else {
-                Log.w("FullScreenCamera", "Camera not active or imageCapture not initialized")
-            }
+
+                    override fun onError(exception: ImageCaptureException) {
+                        Log.e("FullScreenCamera", "Hardware ImageCapture failed, falling back to preview", exception)
+                        fallbackToPreviewBitmap()
+                    }
+                }
+            )
+        } else {
+            fallbackToPreviewBitmap()
         }
     }
 
@@ -237,6 +275,11 @@ fun FullScreenCameraScreen(
         }
         onDispose {
             onRegisterShutter?.invoke {}
+            try {
+                cameraCaptureExecutor.shutdown()
+            } catch (e: Exception) {
+                // Safe shutdown ignore
+            }
         }
     }
 
@@ -246,50 +289,80 @@ fun FullScreenCameraScreen(
             .background(Color.Black)
             .testTag("full_screen_camera_root")
     ) {
-        // 1. Live Camera Feed (Fills full screen edge-to-edge)
+        // 1. Live Camera Feed (Fills full screen edge-to-edge with Tap-to-Focus)
         if (hasCameraPermission) {
             androidx.compose.runtime.key(lensFacing) {
-                AndroidView(
-                    factory = { ctx ->
-                        val previewView = PreviewView(ctx).apply {
-                            implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-                            scaleType = PreviewView.ScaleType.FILL_CENTER
-                        }
-                        previewViewRef = previewView
-
-                        val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
-                        cameraProviderFuture.addListener({
-                            try {
-                                val cameraProvider = cameraProviderFuture.get()
-                                val preview = Preview.Builder().build().also {
-                                    it.setSurfaceProvider(previewView.surfaceProvider)
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(Unit) {
+                            detectTapGestures { offset ->
+                                focusPoint = offset
+                                scope.launch {
+                                    focusScaleAnim.snapTo(1.5f)
+                                    focusAlphaAnim.snapTo(1f)
+                                    val meteringPoint = previewViewRef?.meteringPointFactory?.createPoint(offset.x, offset.y)
+                                    if (meteringPoint != null) {
+                                        val action = FocusMeteringAction.Builder(
+                                            meteringPoint,
+                                            FocusMeteringAction.FLAG_AF or FocusMeteringAction.FLAG_AE
+                                        ).setAutoCancelDuration(3, TimeUnit.SECONDS).build()
+                                        cameraRef?.cameraControl?.startFocusAndMetering(action)
+                                    }
+                                    launch {
+                                        focusScaleAnim.animateTo(1f, tween(200, easing = FastOutSlowInEasing))
+                                    }
+                                    launch {
+                                        delay(1200)
+                                        focusAlphaAnim.animateTo(0f, tween(300))
+                                    }
                                 }
-                                val imageCapture = ImageCapture.Builder()
-                                    .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
-                                    .build()
-                                imageCaptureRef = imageCapture
-
-                                val cameraSelector = CameraSelector.Builder()
-                                    .requireLensFacing(lensFacing)
-                                    .build()
-
-                                cameraProvider.unbindAll()
-                                val cam = cameraProvider.bindToLifecycle(
-                                    lifecycleOwner,
-                                    cameraSelector,
-                                    preview,
-                                    imageCapture
-                                )
-                                cameraRef = cam
-                            } catch (e: Exception) {
-                                Log.e("FullScreenCamera", "Use case binding failed", e)
                             }
-                        }, ContextCompat.getMainExecutor(ctx))
+                        }
+                ) {
+                    AndroidView(
+                        factory = { ctx ->
+                            val previewView = PreviewView(ctx).apply {
+                                implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                                scaleType = PreviewView.ScaleType.FILL_CENTER
+                            }
+                            previewViewRef = previewView
 
-                        previewView
-                    },
-                    modifier = Modifier.fillMaxSize()
-                )
+                            val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
+                            cameraProviderFuture.addListener({
+                                try {
+                                    val cameraProvider = cameraProviderFuture.get()
+                                    val preview = Preview.Builder().build().also {
+                                        it.setSurfaceProvider(previewView.surfaceProvider)
+                                    }
+                                    val imageCapture = ImageCapture.Builder()
+                                        .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+                                        .setJpegQuality(95)
+                                        .build()
+                                    imageCaptureRef = imageCapture
+
+                                    val cameraSelector = CameraSelector.Builder()
+                                        .requireLensFacing(lensFacing)
+                                        .build()
+
+                                    cameraProvider.unbindAll()
+                                    val cam = cameraProvider.bindToLifecycle(
+                                        lifecycleOwner,
+                                        cameraSelector,
+                                        preview,
+                                        imageCapture
+                                    )
+                                    cameraRef = cam
+                                } catch (e: Exception) {
+                                    Log.e("FullScreenCamera", "Use case binding failed", e)
+                                }
+                            }, ContextCompat.getMainExecutor(ctx))
+
+                            previewView
+                        },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         } else {
             // Permission request screen
@@ -449,6 +522,36 @@ fun FullScreenCameraScreen(
                 }
             }
 
+            // 4. Tap-To-Focus Indicator Ring
+            if (focusPoint != null && focusAlphaAnim.value > 0f) {
+                val point = focusPoint!!
+                val boxSize = 64.dp
+                val scale = focusScaleAnim.value
+                val density = LocalDensity.current
+                Box(
+                    modifier = Modifier
+                        .offset(
+                            x = with(density) { (point.x - (boxSize.toPx() / 2)).toDp() },
+                            y = with(density) { (point.y - (boxSize.toPx() / 2)).toDp() }
+                        )
+                        .size(boxSize)
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            alpha = focusAlphaAnim.value
+                        )
+                        .border(1.5.dp, Color(0xFFFFD54F), RoundedCornerShape(8.dp))
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFFD54F))
+                            .align(Alignment.Center)
+                    )
+                }
+            }
+
             // Scanning prompt badge
             Surface(
                 modifier = Modifier
@@ -458,7 +561,7 @@ fun FullScreenCameraScreen(
                 color = Color.Black.copy(alpha = 0.55f)
             ) {
                 Text(
-                    text = if (edgeOcrActive) "Document locked • Ready to transcribe" else "Align notes or textbook page within frame",
+                    text = if (edgeOcrActive) "Tap any text to focus • Ready to capture" else "Tap screen to focus • Align page in frame",
                     style = MaterialTheme.typography.labelSmall,
                     color = Color(0xFFF7F2E9),
                     fontSize = 11.sp,
@@ -490,7 +593,7 @@ fun FullScreenCameraScreen(
                             .background(if (edgeOcrActive) SuccessSage else Color.Gray)
                     )
                     Text(
-                        text = if (edgeOcrActive) "⚡ Edge OCR: 8 Text Blocks Detected" else "Standard Viewfinder",
+                        text = if (edgeOcrActive) "⚡ ML Kit On-Device OCR • Real-Time Text Engine" else "Standard Viewfinder",
                         style = MaterialTheme.typography.labelSmall,
                         color = Color(0xFFF7F2E9),
                         fontSize = 10.sp,
@@ -873,6 +976,42 @@ fun FullScreenCameraScreen(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
+                    }
+                }
+            }
+
+            // Document Filter Mode Selector Pill
+            Surface(
+                shape = RoundedCornerShape(20.dp),
+                color = Color.Black.copy(alpha = 0.65f),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    listOf(
+                        Triple(OfflineOcrProcessor.DocumentFilter.ORIGINAL, "📷 HD Original", "Crystal-clear sensor color"),
+                        Triple(OfflineOcrProcessor.DocumentFilter.CLEAN_NOTES, "📄 Clean Notes", "Whitened paper & ink pop"),
+                        Triple(OfflineOcrProcessor.DocumentFilter.HIGH_CONTRAST, "🖨️ B&W Scan", "High-contrast monochrome")
+                    ).forEach { (filter, label, _) ->
+                        val isSelected = selectedFilter == filter
+                        Surface(
+                            shape = RoundedCornerShape(16.dp),
+                            color = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .clickable { selectedFilter = filter }
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 11.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                color = if (isSelected) Color.White else Color.White.copy(alpha = 0.75f),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                            )
+                        }
                     }
                 }
             }

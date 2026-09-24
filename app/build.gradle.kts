@@ -100,6 +100,7 @@ dependencies {
   implementation(libs.androidx.room.runtime)
   implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
+  implementation(libs.mlkit.text.recognition)
   implementation(libs.firebase.ai)
   // Firestore & Realtime Database for website connection:
   implementation(libs.firebase.firestore)

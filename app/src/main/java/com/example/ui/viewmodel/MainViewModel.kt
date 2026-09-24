@@ -176,40 +176,26 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     private fun ensureQuizQuestions(deck: FlashcardDeck): FlashcardDeck {
-        if (deck.quiz.isNotEmpty()) return deck
+        // If the deck has questions with page numbers or is empty, regenerate dynamically from cards!
+        val hasPageQuestions = deck.quiz.any { it.question.contains(Regex("(?i)page\\s*\\d+")) }
+        if (deck.quiz.isNotEmpty() && !hasPageQuestions) return deck
         val cards = deck.cards
         if (cards.isEmpty()) return deck
 
-        val generatedQuestions = cards.mapIndexed { idx, card ->
-            val otherCards = cards.filter { it.id != card.id }.shuffled()
-            val distractors = otherCards.take(2).map { it.back }.toMutableList()
-            while (distractors.size < 2) {
-                distractors.add("Alternative definition concept #${distractors.size + 1}")
-            }
-            val options = (distractors + card.back).shuffled()
-            val correctIdx = options.indexOf(card.back).coerceAtLeast(0)
-
-            val optionsHi = options.map { com.example.data.util.LanguageHelper.autoTranslateToHindi(it) }
-            val cardFrontHi = card.frontHindi.ifBlank { com.example.data.util.LanguageHelper.autoTranslateToHindi(card.front) }
-            val cardBackHi = card.backHindi.ifBlank { com.example.data.util.LanguageHelper.autoTranslateToHindi(card.back) }
-
-            QuizQuestion(
-                id = "quiz_${card.id}_$idx",
-                question = "What is the key principle or definition of: \"${card.front}\"?",
-                questionHindi = "मुख्य सिद्धांत या परिभाषा क्या है: \"$cardFrontHi\"?",
-                options = options,
-                optionsHindi = optionsHi,
-                correctIndex = correctIdx,
-                explanation = "Key definition: ${card.back}",
-                explanationHindi = "मुख्य परिभाषा: $cardBackHi",
-                xpValue = 15,
-                penaltyXp = 10
-            )
-        }
-
+        val generatedQuestions = com.example.data.quiz.DynamicQuizGenerator.generateFromFlashcards(cards, deck.subject)
         val updated = deck.copy(quiz = generatedQuestions)
         repository.saveDeck(updated)
         return updated
+    }
+
+    fun regenerateQuizFromFlashcards(deckId: String) {
+        val deck = decks.value.find { it.id == deckId } ?: return
+        if (deck.cards.isEmpty()) return
+        val dynamicQuestions = com.example.data.quiz.DynamicQuizGenerator.generateFromFlashcards(deck.cards, deck.subject)
+        val updated = deck.copy(quiz = dynamicQuestions)
+        repository.saveDeck(updated)
+        _activeDeck.value = updated
+        startQuiz()
     }
 
     fun updateProblemSolved(deckId: String, problemId: String, isSolved: Boolean) {
@@ -258,9 +244,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             } else {
                 com.example.data.model.SubjectClassifier.detectSubject(noteSnippet)
             }
+            // Bounded to 2048px (Full HD+ / 2K) to preserve crystal-clear text sharpness without excessive RAM usage
+            val maxDim = 2048
+            val scaledBitmap = if (bitmap.width > maxDim || bitmap.height > maxDim) {
+                val ratio = minOf(maxDim.toFloat() / bitmap.width, maxDim.toFloat() / bitmap.height)
+                val targetW = (bitmap.width * ratio).toInt().coerceAtLeast(1)
+                val targetH = (bitmap.height * ratio).toInt().coerceAtLeast(1)
+                Bitmap.createScaledBitmap(bitmap, targetW, targetH, true)
+            } else {
+                bitmap
+            }
             val newPage = CapturedPage(
                 pageNumber = pageNum,
-                bitmap = bitmap,
+                bitmap = scaledBitmap,
                 noteSnippet = noteSnippet,
                 extractedText = noteSnippet,
                 autoDetectedSubject = detected,
@@ -269,19 +265,40 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             current.add(newPage)
             _capturedPages.value = current
 
-            // Perform background text extraction if noteSnippet is blank
+            // Perform real on-device ML Kit OCR and optional Gemini refinement
             if (noteSnippet.isBlank()) {
                 viewModelScope.launch {
                     try {
-                        val ocrText = geminiService.extractTextFromBitmap(bitmap)
-                        val refinedSubject = com.example.data.model.SubjectClassifier.detectSubject(ocrText)
-                        _capturedPages.value = _capturedPages.value.map { p ->
-                            if (p.id == newPage.id) {
-                                p.copy(
-                                    extractedText = ocrText,
-                                    autoDetectedSubject = if (p.manualLabel.isNotBlank()) p.manualLabel else refinedSubject
-                                )
-                            } else p
+                        // 1. Instant on-device ML Kit OCR
+                        val onDeviceOcr = com.example.util.OfflineOcrProcessor.extractTextFromBitmap(scaledBitmap)
+                        if (onDeviceOcr.isNotBlank()) {
+                            val initialSubject = if (newPage.manualLabel.isNotBlank()) {
+                                newPage.manualLabel
+                            } else {
+                                com.example.data.model.SubjectClassifier.detectSubject(onDeviceOcr)
+                            }
+                            _capturedPages.value = _capturedPages.value.map { p ->
+                                if (p.id == newPage.id) {
+                                    p.copy(
+                                        extractedText = onDeviceOcr,
+                                        autoDetectedSubject = initialSubject
+                                    )
+                                } else p
+                            }
+                        }
+
+                        // 2. Cloud AI multimodal enhancement if key exists
+                        val ocrText = geminiService.extractTextFromBitmap(scaledBitmap)
+                        if (ocrText.isNotBlank() && ocrText != onDeviceOcr) {
+                            val refinedSubject = com.example.data.model.SubjectClassifier.detectSubject(ocrText)
+                            _capturedPages.value = _capturedPages.value.map { p ->
+                                if (p.id == newPage.id) {
+                                    p.copy(
+                                        extractedText = ocrText,
+                                        autoDetectedSubject = if (p.manualLabel.isNotBlank()) p.manualLabel else refinedSubject
+                                    )
+                                } else p
+                            }
                         }
                     } catch (e: Exception) {
                         Log.w("MainViewModel", "OCR extraction non-fatal: ${e.message}")
@@ -491,6 +508,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         if (_currentCardIndex.value < deck.cards.size - 1) {
             _currentCardIndex.value++
             _isCardFlipped.value = false
+        }
+    }
+
+    fun markSpecificCardMastery(deckId: String, cardId: String, isMastered: Boolean) {
+        val prevLevel = userProfile.value.levelInfo.level
+        repository.updateDeckCardMastery(deckId, cardId, isMastered)
+        if (userProfile.value.levelInfo.level > prevLevel) {
+            _celebratedLevel.value = userProfile.value.levelInfo
         }
     }
 

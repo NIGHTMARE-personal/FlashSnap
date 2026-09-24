@@ -397,32 +397,34 @@ class FlashcardRepository(private val context: Context) {
     }
 
     private fun saveQuizHistory(records: List<QuizRecord>) {
-        try {
-            val array = JSONArray()
-            for (r in records) {
-                val obj = JSONObject().apply {
-                    put("id", r.id)
-                    put("deckId", r.deckId)
-                    put("deckTitle", r.deckTitle)
-                    put("subject", r.subject)
-                    put("timestamp", r.timestamp)
-                    put("totalQuestions", r.totalQuestions)
-                    put("correctCount", r.correctCount)
-                    put("wrongCount", r.wrongCount)
-                    put("netPoints", r.netPoints)
-                    put("durationSeconds", r.durationSeconds)
-                }
-                array.put(obj)
-            }
-            val jsonStr = array.toString()
-            prefs.edit().putString(KEY_QUIZ_HISTORY, jsonStr).apply()
+        scope.launch {
             try {
-                File(context.filesDir, FILE_QUIZ_HISTORY_STORE).writeText(jsonStr, Charsets.UTF_8)
-            } catch (fe: Exception) {
-                Log.w(TAG, "Notice writing quiz history file: ${fe.message}")
+                val array = JSONArray()
+                for (r in records) {
+                    val obj = JSONObject().apply {
+                        put("id", r.id)
+                        put("deckId", r.deckId)
+                        put("deckTitle", r.deckTitle)
+                        put("subject", r.subject)
+                        put("timestamp", r.timestamp)
+                        put("totalQuestions", r.totalQuestions)
+                        put("correctCount", r.correctCount)
+                        put("wrongCount", r.wrongCount)
+                        put("netPoints", r.netPoints)
+                        put("durationSeconds", r.durationSeconds)
+                    }
+                    array.put(obj)
+                }
+                val jsonStr = array.toString()
+                prefs.edit().putString(KEY_QUIZ_HISTORY, jsonStr).apply()
+                try {
+                    File(context.filesDir, FILE_QUIZ_HISTORY_STORE).writeText(jsonStr, Charsets.UTF_8)
+                } catch (fe: Exception) {
+                    Log.w(TAG, "Notice writing quiz history file: ${fe.message}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed saving quiz history: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed saving quiz history: ${e.message}")
         }
     }
 
@@ -580,50 +582,54 @@ class FlashcardRepository(private val context: Context) {
 
     fun clearQuizHistory() {
         _quizHistory.value = emptyList()
-        prefs.edit().remove(KEY_QUIZ_HISTORY).apply()
-        try {
-            val file = File(context.filesDir, FILE_QUIZ_HISTORY_STORE)
-            if (file.exists()) file.delete()
-        } catch (e: Exception) {
-            Log.w(TAG, "Notice clearing quiz history file: ${e.message}")
+        scope.launch {
+            prefs.edit().remove(KEY_QUIZ_HISTORY).apply()
+            try {
+                val file = File(context.filesDir, FILE_QUIZ_HISTORY_STORE)
+                if (file.exists()) file.delete()
+            } catch (e: Exception) {
+                Log.w(TAG, "Notice clearing quiz history file: ${e.message}")
+            }
         }
     }
 
     fun updateProfile(profile: UserProfile) {
         _userProfile.value = profile
-        // Save local
-        try {
-            val json = JSONObject().apply {
-                put("name", profile.name)
-                put("studyField", profile.studyField)
-                put("studyGoal", profile.studyGoal)
-                put("avatarEmoji", profile.avatarEmoji)
-                put("studySpaceWorkspaceId", profile.studySpaceWorkspaceId)
-                put("studySpaceSyncEnabled", profile.studySpaceSyncEnabled)
-                put("websiteUrl", profile.websiteUrl)
-                put("xp", profile.xp)
-                put("streakDays", profile.streakDays)
-                put("totalQuizzesTaken", profile.totalQuizzesTaken)
-                put("totalCardsMastered", profile.totalCardsMastered)
-                put("correctAnswers", profile.correctAnswers)
-                put("wrongAnswers", profile.wrongAnswers)
-                put("netQuizPoints", profile.netQuizPoints)
-                put("studyLanguage", profile.studyLanguage)
-                put("reminderEnabled", profile.reminderEnabled)
-                put("reminderHour", profile.reminderHour)
-                put("reminderMinute", profile.reminderMinute)
-                put("typicalStudyTimeLabel", profile.typicalStudyTimeLabel)
-            }
-            val jsonStr = json.toString()
-            prefs.edit().putString(KEY_PROFILE, jsonStr).apply()
+        // Save local on background IO
+        scope.launch {
             try {
-                val profileFile = File(context.filesDir, FILE_PROFILE_STORE)
-                profileFile.writeText(jsonStr, Charsets.UTF_8)
-            } catch (fe: Exception) {
-                Log.w(TAG, "Notice writing profile file: ${fe.message}")
+                val json = JSONObject().apply {
+                    put("name", profile.name)
+                    put("studyField", profile.studyField)
+                    put("studyGoal", profile.studyGoal)
+                    put("avatarEmoji", profile.avatarEmoji)
+                    put("studySpaceWorkspaceId", profile.studySpaceWorkspaceId)
+                    put("studySpaceSyncEnabled", profile.studySpaceSyncEnabled)
+                    put("websiteUrl", profile.websiteUrl)
+                    put("xp", profile.xp)
+                    put("streakDays", profile.streakDays)
+                    put("totalQuizzesTaken", profile.totalQuizzesTaken)
+                    put("totalCardsMastered", profile.totalCardsMastered)
+                    put("correctAnswers", profile.correctAnswers)
+                    put("wrongAnswers", profile.wrongAnswers)
+                    put("netQuizPoints", profile.netQuizPoints)
+                    put("studyLanguage", profile.studyLanguage)
+                    put("reminderEnabled", profile.reminderEnabled)
+                    put("reminderHour", profile.reminderHour)
+                    put("reminderMinute", profile.reminderMinute)
+                    put("typicalStudyTimeLabel", profile.typicalStudyTimeLabel)
+                }
+                val jsonStr = json.toString()
+                prefs.edit().putString(KEY_PROFILE, jsonStr).apply()
+                try {
+                    val profileFile = File(context.filesDir, FILE_PROFILE_STORE)
+                    profileFile.writeText(jsonStr, Charsets.UTF_8)
+                } catch (fe: Exception) {
+                    Log.w(TAG, "Notice writing profile file: ${fe.message}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save profile: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to save profile: ${e.message}")
         }
 
         // Upload to Firebase Firestore
@@ -1191,112 +1197,114 @@ class FlashcardRepository(private val context: Context) {
     }
 
     private fun saveLocalDecks(decksList: List<FlashcardDeck>) {
-        try {
-            val array = JSONArray()
-            for (deck in decksList) {
-                val obj = JSONObject().apply {
-                    put("id", deck.id)
-                    put("title", deck.title)
-                    put("description", deck.description)
-                    put("createdAt", deck.createdAt)
-                    put("pagesCount", deck.pagesCount)
-                    put("subject", deck.subject)
-                    put("extractedSummaryText", deck.extractedSummaryText)
-                    put("isCloudSynced", deck.isCloudSynced)
-
-                    val cardsArr = JSONArray()
-                    for (c in deck.cards) {
-                        cardsArr.put(JSONObject().apply {
-                            put("id", c.id)
-                            put("front", c.front)
-                            put("back", c.back)
-                            put("frontHindi", c.frontHindi)
-                            put("backHindi", c.backHindi)
-                            put("keyTerm", c.keyTerm)
-                            put("keyTermHindi", c.keyTermHindi)
-                            put("tag", c.tag)
-                            put("difficulty", c.difficulty)
-                            put("isMastered", c.isMastered)
-                            put("reviewCount", c.reviewCount)
-                            put("subject", c.subject)
-                            put("sourcePageNumber", c.sourcePageNumber)
-                            put("createdAt", c.createdAt)
-                        })
-                    }
-                    put("cards", cardsArr)
-
-                    val quizArr = JSONArray()
-                    for (q in deck.quiz) {
-                        quizArr.put(JSONObject().apply {
-                            put("id", q.id)
-                            put("question", q.question)
-                            put("questionHindi", q.questionHindi)
-                            put("correctIndex", q.correctIndex)
-                            put("explanation", q.explanation)
-                            put("explanationHindi", q.explanationHindi)
-                            put("xpValue", q.xpValue)
-                            put("penaltyXp", q.penaltyXp)
-                            val optArr = JSONArray()
-                            for (o in q.options) optArr.put(o)
-                            put("options", optArr)
-                            val optHiArr = JSONArray()
-                            for (oh in q.optionsHindi) optHiArr.put(oh)
-                            put("optionsHindi", optHiArr)
-                        })
-                    }
-                    put("quiz", quizArr)
-
-                    val probArr = JSONArray()
-                    for (p in deck.practiceProblems) {
-                        probArr.put(JSONObject().apply {
-                            put("id", p.id)
-                            put("title", p.title)
-                            put("subject", p.subject)
-                            put("problemStatement", p.problemStatement)
-                            put("problemStatementHindi", p.problemStatementHindi)
-                            put("equationOrFormula", p.equationOrFormula)
-                            put("diagramType", p.diagramType)
-                            put("diagramContent", p.diagramContent)
-                            put("whatToFind", p.whatToFind)
-                            put("hint", p.hint)
-                            put("finalAnswer", p.finalAnswer)
-                            put("difficulty", p.difficulty)
-                            put("isSolved", p.isSolved)
-                            put("userDraftAnswer", p.userDraftAnswer)
-                            val gArr = JSONArray()
-                            for (g in p.givenData) gArr.put(g)
-                            put("givenData", gArr)
-                            val sArr = JSONArray()
-                            for (s in p.stepByStepSolution) sArr.put(s)
-                            put("stepByStepSolution", sArr)
-                        })
-                    }
-                    put("practiceProblems", probArr)
-                }
-                array.put(obj)
-            }
-            val jsonString = array.toString()
-            // 1. Primary fast cache in SharedPreferences
-            prefs.edit().putString(KEY_DECKS, jsonString).apply()
-
-            // 2. Persistent atomic internal file storage (survives app updates & prefs clearing)
+        scope.launch {
             try {
-                val tempFile = File(context.filesDir, "$FILE_DECKS_STORE.tmp")
-                val storeFile = File(context.filesDir, FILE_DECKS_STORE)
-                val backupFile = File(context.filesDir, FILE_DECKS_BACKUP)
+                val array = JSONArray()
+                for (deck in decksList) {
+                    val obj = JSONObject().apply {
+                        put("id", deck.id)
+                        put("title", deck.title)
+                        put("description", deck.description)
+                        put("createdAt", deck.createdAt)
+                        put("pagesCount", deck.pagesCount)
+                        put("subject", deck.subject)
+                        put("extractedSummaryText", deck.extractedSummaryText)
+                        put("isCloudSynced", deck.isCloudSynced)
 
-                tempFile.writeText(jsonString, Charsets.UTF_8)
-                if (storeFile.exists()) {
-                    storeFile.copyTo(backupFile, overwrite = true)
+                        val cardsArr = JSONArray()
+                        for (c in deck.cards) {
+                            cardsArr.put(JSONObject().apply {
+                                put("id", c.id)
+                                put("front", c.front)
+                                put("back", c.back)
+                                put("frontHindi", c.frontHindi)
+                                put("backHindi", c.backHindi)
+                                put("keyTerm", c.keyTerm)
+                                put("keyTermHindi", c.keyTermHindi)
+                                put("tag", c.tag)
+                                put("difficulty", c.difficulty)
+                                put("isMastered", c.isMastered)
+                                put("reviewCount", c.reviewCount)
+                                put("subject", c.subject)
+                                put("sourcePageNumber", c.sourcePageNumber)
+                                put("createdAt", c.createdAt)
+                            })
+                        }
+                        put("cards", cardsArr)
+
+                        val quizArr = JSONArray()
+                        for (q in deck.quiz) {
+                            quizArr.put(JSONObject().apply {
+                                put("id", q.id)
+                                put("question", q.question)
+                                put("questionHindi", q.questionHindi)
+                                put("correctIndex", q.correctIndex)
+                                put("explanation", q.explanation)
+                                put("explanationHindi", q.explanationHindi)
+                                put("xpValue", q.xpValue)
+                                put("penaltyXp", q.penaltyXp)
+                                val optArr = JSONArray()
+                                for (o in q.options) optArr.put(o)
+                                put("options", optArr)
+                                val optHiArr = JSONArray()
+                                for (oh in q.optionsHindi) optHiArr.put(oh)
+                                put("optionsHindi", optHiArr)
+                            })
+                        }
+                        put("quiz", quizArr)
+
+                        val probArr = JSONArray()
+                        for (p in deck.practiceProblems) {
+                            probArr.put(JSONObject().apply {
+                                put("id", p.id)
+                                put("title", p.title)
+                                put("subject", p.subject)
+                                put("problemStatement", p.problemStatement)
+                                put("problemStatementHindi", p.problemStatementHindi)
+                                put("equationOrFormula", p.equationOrFormula)
+                                put("diagramType", p.diagramType)
+                                put("diagramContent", p.diagramContent)
+                                put("whatToFind", p.whatToFind)
+                                put("hint", p.hint)
+                                put("finalAnswer", p.finalAnswer)
+                                put("difficulty", p.difficulty)
+                                put("isSolved", p.isSolved)
+                                put("userDraftAnswer", p.userDraftAnswer)
+                                val gArr = JSONArray()
+                                for (g in p.givenData) gArr.put(g)
+                                put("givenData", gArr)
+                                val sArr = JSONArray()
+                                for (s in p.stepByStepSolution) sArr.put(s)
+                                put("stepByStepSolution", sArr)
+                            })
+                        }
+                        put("practiceProblems", probArr)
+                    }
+                    array.put(obj)
                 }
-                if (tempFile.exists()) {
-                    tempFile.renameTo(storeFile)
+                val jsonString = array.toString()
+                // 1. Primary fast cache in SharedPreferences
+                prefs.edit().putString(KEY_DECKS, jsonString).apply()
+
+                // 2. Persistent atomic internal file storage (survives app updates & prefs clearing)
+                try {
+                    val tempFile = File(context.filesDir, "$FILE_DECKS_STORE.tmp")
+                    val storeFile = File(context.filesDir, FILE_DECKS_STORE)
+                    val backupFile = File(context.filesDir, FILE_DECKS_BACKUP)
+
+                    tempFile.writeText(jsonString, Charsets.UTF_8)
+                    if (storeFile.exists()) {
+                        storeFile.copyTo(backupFile, overwrite = true)
+                    }
+                    if (tempFile.exists()) {
+                        tempFile.renameTo(storeFile)
+                    }
+                } catch (fe: Exception) {
+                    Log.w(TAG, "Notice saving decks to internal file: ${fe.message}")
                 }
-            } catch (fe: Exception) {
-                Log.w(TAG, "Notice saving decks to internal file: ${fe.message}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed saving local decks: ${e.message}")
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed saving local decks: ${e.message}")
         }
     }
 

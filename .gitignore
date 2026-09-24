@@ -48,10 +48,11 @@ debug.keystore.base64
 # Google Services / Firebase credentials
 # Note: google-services.json contains client keys for your Firebase project.
 # To keep your private Firebase project separate on public GitHub, use google-services.json.example
-# app/google-services.json
+app/google-services.json
 
 # AI Studio platform internal files
 /.aistudio/
+metadata.json
 
 # Log files
 *.log

@@ -600,7 +600,7 @@ fun PagesScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        text = "Text transcribed from the scanned page by Gemini OCR:",
+                        text = "Text transcribed via Google ML Kit on-device OCR (+ Gemini AI):",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

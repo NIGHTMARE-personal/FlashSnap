@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.ElectricBolt
 import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material.icons.filled.FormatListBulleted
 import androidx.compose.material.icons.filled.Functions
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Layers
@@ -109,6 +111,7 @@ enum class DeckFilter {
 
 enum class DecksTab {
     ALL_DECKS,
+    ALL_FLASHCARDS,
     TIMELINE
 }
 
@@ -122,6 +125,7 @@ fun DecksScreen(
     onDeleteDeck: (String) -> Unit,
     onGoToCamera: () -> Unit,
     onSolveProblems: (String) -> Unit = { onDeckClick(it) },
+    onMarkCardMastery: ((deckId: String, cardId: String, Boolean) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var selectedTab by remember { mutableStateOf(DecksTab.ALL_DECKS) }
@@ -191,6 +195,20 @@ fun DecksScreen(
 
     val totalFlashcards = remember(decks) { decks.sumOf { it.cards.size } }
     val totalMastered = remember(decks) { decks.sumOf { d -> d.cards.count { it.isMastered } } }
+
+    val allCardsWithDeck = remember(filteredDecks, searchQuery) {
+        val query = searchQuery.trim().removePrefix("#")
+        filteredDecks.flatMap { deck ->
+            deck.cards.map { card -> card to deck }
+        }.filter { (card, deck) ->
+            if (query.isBlank()) true
+            else card.front.contains(query, ignoreCase = true) ||
+                 card.back.contains(query, ignoreCase = true) ||
+                 card.tag.contains(query, ignoreCase = true) ||
+                 card.keyTerm.contains(query, ignoreCase = true) ||
+                 deck.title.contains(query, ignoreCase = true)
+        }
+    }
 
     Column(
         modifier = modifier
@@ -294,6 +312,21 @@ fun DecksScreen(
                 }
             )
             Tab(
+                selected = selectedTab == DecksTab.ALL_FLASHCARDS,
+                onClick = { selectedTab = DecksTab.ALL_FLASHCARDS },
+                text = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.FormatListBulleted,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Flashcards (${allCardsWithDeck.size})", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+            )
+            Tab(
                 selected = selectedTab == DecksTab.TIMELINE,
                 onClick = { selectedTab = DecksTab.TIMELINE },
                 text = {
@@ -313,9 +346,64 @@ fun DecksScreen(
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            if (selectedTab == DecksTab.TIMELINE) {
+            if (selectedTab == DecksTab.ALL_FLASHCARDS) {
+                // ══════════════════════════════════════════════════════════════
+                // ALL FLASHCARDS FEED VIEW: Scrollable List with Bounded Max Height Containers
+                // ══════════════════════════════════════════════════════════════
+                if (allCardsWithDeck.isEmpty()) {
+                    item {
+                        CleanEmptyDecksState(
+                            hasDecks = decks.isNotEmpty(),
+                            isFiltered = searchQuery.isNotBlank() || selectedTagFilter != null || selectedSubjectFilter != "All" || selectedFilter != DeckFilter.ALL,
+                            onClearFilter = {
+                                searchQuery = ""
+                                selectedTagFilter = null
+                                selectedSubjectFilter = "All"
+                                selectedFilter = DeckFilter.ALL
+                                selectedLeitnerBox = null
+                            },
+                            onGoToCamera = onGoToCamera
+                        )
+                    }
+                } else {
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "FLASHCARDS FEED (${allCardsWithDeck.size})",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                letterSpacing = 0.8.sp
+                            )
+                            Text(
+                                text = "Tap card to flip • Bounded height",
+                                fontSize = 10.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    itemsIndexed(allCardsWithDeck, key = { _, pair -> "${pair.second.id}_${pair.first.id}" }) { index, (card, deck) ->
+                        ScrollableFlashcardItem(
+                            index = index + 1,
+                            card = card,
+                            deckTitle = deck.title,
+                            onToggleMastery = { isMastered ->
+                                onMarkCardMastery?.invoke(deck.id, card.id, isMastered)
+                            },
+                            onClickStudy = { onDeckClick(deck.id) }
+                        )
+                    }
+                }
+            } else if (selectedTab == DecksTab.TIMELINE) {
                 // ══════════════════════════════════════════════════════════════
                 // TIMELINE VIEW: Chronological Scan Journal
                 // ══════════════════════════════════════════════════════════════
